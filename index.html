@@ -149,7 +149,8 @@ tbody tr.clickable:hover{background:var(--surface-2)}
 .mini{font-size:11px; color:var(--ink-3)}
 
 /* matrix */
-.matrix{display:grid; gap:3px; font-size:11.5px; min-width:520px}
+.matrix{display:grid; gap:3px; font-size:11.5px; min-width:620px}
+.matrix .ph{font-size:10.5px; color:var(--ink-2); text-align:center; padding:0 4px 5px; border-bottom:1px solid var(--line-2); margin-bottom:4px}
 .matrix .h{color:var(--ink-3); font-size:11px; padding:0 4px 4px; text-align:center}
 .matrix .rowname{padding:6px 8px 6px 0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
 .cell{height:30px; border-radius:5px; display:flex; align-items:center; justify-content:center; color:var(--ink); font-weight:500}
@@ -491,6 +492,10 @@ const SCALE_STD = [[110,5],[100,4],[90,3],[80,2],[70,1],[0,0]];
 const SCALE_ONTIME = [[100,5],[95,4],[85,3],[75,2],[60,1],[0,0]];
 const SCALE_BUDGET = [[100,5],[98,4],[95,3],[90,2],[85,1],[0,0]]; // tiết kiệm/đúng ngân sách
 const GROUPS = ['Tài chính','Khách hàng & dịch vụ','Quy trình & hệ thống','Đào tạo & phát triển'];
+const BGROUPS = ['Thái độ & kỷ luật','Chuyên môn & cải tiến'];
+const ALLG = [...GROUPS,...BGROUPS];
+const PART_NAME = {1:'Công việc',2:'Năng lực'};
+const groupName = c => c.part===1?GROUPS[c.g]:BGROUPS[c.g-4];
 
 const KPISET = {
   'Kinh doanh':{
@@ -543,15 +548,15 @@ const KPISET = {
     ]}
 };
 const BEHAV = [
-  {w:.40,name:'Kỷ luật, chuyên cần',scale:SCALE_ONTIME,
+  {bg:4,w:.40,name:'Kỷ luật, chuyên cần',scale:SCALE_ONTIME,
    desc:'Trừ điểm theo số lần đi muộn/về sớm, quên chấm công, nghỉ không lương trong tháng.',
    src:'Base HRM — chấm công (đã số hóa)'},
-  {w:.20,name:'Trung thực, minh bạch',scale:SCALE_ONTIME,
+  {bg:4,w:.20,name:'Trung thực, minh bạch',scale:SCALE_ONTIME,
    desc:'Không có vi phạm về báo cáo, chứng từ trong kỳ; quản lý xác nhận.',src:'Quản lý đánh giá'},
-  {w:.20,name:'Tuân thủ quy trình, nội quy',scale:SCALE_ONTIME,
+  {bg:4,w:.20,name:'Tuân thủ quy trình, nội quy',scale:SCALE_ONTIME,
    desc:'Số bước quy trình để báo đỏ/trễ hạn trên Base và vi phạm nội quy ghi nhận trong kỳ.',
    src:'Base Quy trình — trạng thái trễ hạn'},
-  {w:.20,name:'Đóng góp, cải tiến',scale:SCALE_STD,
+  {bg:5,w:.20,name:'Đóng góp, cải tiến',scale:SCALE_STD,
    desc:'Ý kiến/hoạt động cải tiến được ghi nhận và áp dụng trong kỳ.',src:'Quản lý đánh giá'}
 ];
 
@@ -591,7 +596,7 @@ function buildRecord(emp,month){
     let pct=103+emp.bias*3+(rnd()-0.5)*17; pct=Math.max(58,Math.min(120,pct));
     const rule=scoreOf(c.scale,pct); let appr=rule;
     if(rnd()>0.93 && rule<5) appr=rule+1;
-    crit.push({...c,g:4,part:2,pct,rule,appr,self:Math.min(5,appr+(rnd()>0.6?1:0)),ql1:appr,ql2:appr});
+    crit.push({...c,g:c.bg,part:2,pct,rule,appr,self:Math.min(5,appr+(rnd()>0.6?1:0)),ql1:appr,ql2:appr});
   });
 
   // dữ liệu căn cứ
@@ -623,7 +628,7 @@ function finalize(rec){
   rec.ratio=rec.total/TARGET_TOTAL*100; rec.rank=rankOf(rec.ratio);
   rec.totalRule=p1r+p2r; rec.ratioRule=rec.totalRule/TARGET_TOTAL*100; rec.rankRule=rankOf(rec.ratioRule);
   rec.gap=rec.total-rec.totalRule;
-  rec.groupPct=[0,1,2,3,4].map(g=>{
+  rec.groupPct=[0,1,2,3,4,5].map(g=>{
     const cs=rec.crit.filter(c=>c.g===g);
     const t=cs.reduce((s,c)=>s+c.ptsTarget,0), a=cs.reduce((s,c)=>s+c.pts,0);
     return t?a/t*100:0;
@@ -685,7 +690,7 @@ function tasksOf(emp,month){
 }
 
 /* ===================== TRẠNG THÁI & TRUY VẤN ===================== */
-const state={page:1, month:CUR_MONTH, khoi:'Tất cả', deptId:'smn', empId:1, tab:'goals', crit:0, search:'', user:null};
+const state={page:1, month:CUR_MONTH, khoi:'Tất cả', deptId:'smn', empId:1, tab:'work', crit:0, search:'', user:null};
 const recOf=(id,m)=>DATA[id][m];
 function pool(month,{khoi,deptId}={}){
   return EMPLOYEES.filter(e=> (!khoi||khoi==='Tất cả'||e.khoi===khoi) && (!deptId||e.deptId===deptId))
@@ -912,18 +917,19 @@ function renderP1(){
      {v:`${gapCount}`,l:'Hồ sơ lệch điểm',tone:'bad'}]});
 
   const dt=a.dist.reduce((s,x)=>s+x,0)||1;
-  const GN=[...GROUPS,'Thái độ & hành vi'];
+  const GN=ALLG;
   const hmRows=deptAgg.map(({d})=>{
     const closed=pool(state.month,{deptId:d.id}).filter(r=>r.status==='Đã chốt');
-    const g=[0,1,2,3,4].map(i=> closed.length? closed.reduce((s,r)=>s+r.groupPct[i],0)/closed.length : null);
+    const g=[0,1,2,3,4,5].map(i=> closed.length? closed.reduce((s,r)=>s+r.groupPct[i],0)/closed.length : null);
     return {d,g,n:closed.length};
   });
-  const hmCols=[0,1,2,3,4].map(i=>{
+  const hmCols=[0,1,2,3,4,5].map(i=>{
     const v=hmRows.filter(x=>x.g[i]!==null);
     return v.length? v.reduce((s,x)=>s+x.g[i],0)/v.length : null;
   });
   const hotIdx=hmCols.reduce((best,v,i)=>(v!==null&&(best<0||v<hmCols[best]))?i:best,-1);
-  const heatmap=`<div class="matrix" style="grid-template-columns:168px repeat(5,1fr)">
+  const heatmap=`<div class="matrix" style="grid-template-columns:168px repeat(6,1fr)">
+      <div></div><div class="ph" style="grid-column:span 4">Phần I — Công việc · 80%</div><div class="ph" style="grid-column:span 2">Phần II — Năng lực · 20%</div>
       <div></div>${GN.map((g,i)=>`<div class="h ${i===hotIdx?'hot':''}">${g}</div>`).join('')}
       ${hmRows.map(x=>`<div class="rowname clickable" onclick="go(2,{deptId:'${x.d.id}'})" title="${x.d.name}">${x.d.name}</div>`+
         x.g.map((v,i)=>v===null?`<div class="cell empty">—</div>`
@@ -1027,8 +1033,9 @@ function renderP2(){
      {v:`${waiting}`,l:'Chờ quản lý đánh giá',tone:'warn'},
      {v:`${gapRecs.length}`,l:'Hồ sơ lệch điểm',tone:'bad'}]});
 
-  const gnames=[...GROUPS,'Thái độ & hành vi'];
-  const matrix=`<div class="matrix" style="grid-template-columns:150px repeat(5,1fr)">
+  const gnames=ALLG;
+  const matrix=`<div class="matrix" style="grid-template-columns:150px repeat(6,1fr)">
+      <div></div><div class="ph" style="grid-column:span 4">Công việc · 80%</div><div class="ph" style="grid-column:span 2">Năng lực · 20%</div>
       <div></div>${gnames.map(g=>`<div class="h">${g}</div>`).join('')}
       ${sorted.map(r=>`<div class="rowname" title="${r.emp.name}">${r.emp.name}</div>`+
         r.groupPct.map((p,gi)=>`<div class="cell" style="background:${heat(p)}" title="${r.emp.name} — ${gnames[gi]}: ${fmt(p,0)}% điểm mục tiêu nhóm">${fmt(p,0)}</div>`).join('')).join('')}
@@ -1085,8 +1092,8 @@ function renderP2(){
 
   <div class="card">
     <div class="tabs" role="tablist">
-      <button role="tab" aria-selected="${state.tab==='goals'}" onclick="go(2,{tab:'goals'})">Mục tiêu và công việc</button>
-      <button role="tab" aria-selected="${state.tab==='comp'}" onclick="go(2,{tab:'comp'})">Tuân thủ và phối hợp</button>
+      <button role="tab" aria-selected="${state.tab==='work'}" onclick="go(2,{tab:'work'})">Phần I — Công việc</button>
+      <button role="tab" aria-selected="${state.tab==='cap'}" onclick="go(2,{tab:'cap'})">Phần II — Năng lực</button>
       <button role="tab" aria-selected="${state.tab==='prog'}" onclick="go(2,{tab:'prog'})">Tiến độ đánh giá</button>
     </div>
     <div class="body tbl-wrap">${tabContent(d,recs)}</div>
@@ -1094,7 +1101,10 @@ function renderP2(){
 }
 
 function tabContent(d,recs){
-  if(state.tab==='goals'){
+  const isSale=d.khoi==='Kinh doanh';
+
+  /* ---------- PHẦN I — CÔNG VIỆC ---------- */
+  if(state.tab==='work'){
     const all=recs.flatMap(r=>tasksOf(r.emp,state.month).map(t=>({r,t})));
     const late=all.filter(x=>x.t.status==='Quá hạn'||x.t.status==='Hoàn thành trễ');
     const shown=[...late,...all.filter(x=>!late.includes(x))].slice(0,10);
@@ -1103,28 +1113,62 @@ function tabContent(d,recs){
       <td class="num">${t.done}%</td>
       <td>${t.status==='Quá hạn'?`<span class="pill D">Quá hạn</span>`:t.status==='Hoàn thành trễ'?`<span class="pill C">Hoàn thành trễ</span>`:t.status==='Chuyển tiếp tháng sau'?`<span class="mini">Chuyển tiếp T${state.month+1}</span>`:t.status==='Hoàn thành'?`<span class="mini">Hoàn thành</span>`:`<span class="mini">Đang thực hiện</span>`}</td>
       <td class="num">${fmt(t.star,1)} ★</td></tr>`).join('');
-    const isSale=d.khoi==='Kinh doanh';
-    const salesRows=isSale?recs.map(r=>{const p=r.sales.actual/r.sales.target*100;return `<tr><td>${r.emp.name}</td><td class="num">${fmt0(r.sales.target)} tr</td><td class="num">${fmt0(r.sales.actual)} tr</td>
-      <td class="num" style="${p<100?'color:var(--red);font-weight:600':''}">${fmt(p,1)}%</td><td style="width:80px">${ibar(p,p<100?'var(--red)':'var(--brand)')}</td><td class="num">${fmt(r.sales.debtPct,0)}%</td><td class="num">${r.sales.newCus}/${r.sales.quota}</td></tr>`;}).join(''):'';
-    return (isSale?`<h3 class="sub-h">Chỉ tiêu kinh doanh tháng ${state.month}</h3>
-      <table style="margin-bottom:24px"><thead><tr><th>Nhân viên</th><th class="num">Chỉ tiêu</th><th class="num">Thực đạt</th><th class="num">Mức hoàn thành</th><th></th><th class="num">Thu hồi công nợ</th><th class="num">KH mới</th></tr></thead><tbody>${salesRows}</tbody></table>`:'')
-      +`<h3 class="sub-h">Mục tiêu và công việc trong tháng — ưu tiên việc trễ hạn</h3>
-        <table><thead><tr><th>Nhân viên</th><th>Nội dung công việc</th><th>Nhóm KPI</th><th class="num">Hạn</th><th class="num">Hoàn thành</th><th>Trạng thái</th><th class="num">Điểm chất lượng</th></tr></thead><tbody>${rows}</tbody></table>
+
+    const head1 = isSale
+      ? `<h3 class="sub-h">Tài chính, khách hàng và dịch vụ — tháng ${state.month}</h3>
+         <table style="margin-bottom:24px"><thead><tr><th>Nhân viên</th><th class="num">Chỉ tiêu</th><th class="num">Thực đạt</th><th class="num">Mức hoàn thành</th><th></th><th class="num">Thu hồi công nợ</th><th class="num">KH mới</th></tr></thead><tbody>${
+          recs.map(r=>{const p=r.sales.actual/r.sales.target*100;return `<tr><td>${r.emp.name}</td><td class="num">${fmt0(r.sales.target)} tr</td><td class="num">${fmt0(r.sales.actual)} tr</td>
+          <td class="num" style="${p<100?'color:var(--red);font-weight:600':''}">${fmt(p,1)}%</td><td style="width:80px">${ibar(p,p<100?'var(--red)':'var(--brand)')}</td><td class="num">${fmt(r.sales.debtPct,0)}%</td><td class="num">${r.sales.newCus}/${r.sales.quota}</td></tr>`;}).join('')
+         }</tbody></table>`
+      : `<h3 class="sub-h">Tài chính, khách hàng và dịch vụ — tháng ${state.month}</h3>
+         <table style="margin-bottom:24px"><thead><tr><th>Nhân viên</th><th class="num">Ngân sách đã dùng</th><th class="num">Điểm tài chính</th><th class="num">Phục vụ nội bộ</th><th class="num">Lượt đánh giá</th><th class="num">Mục tiêu tháng</th><th></th></tr></thead><tbody>${
+          recs.map(r=>{const c0=r.crit[0],c1=r.crit[1],c2=r.crit[2],use=200-c0.pct;
+          return `<tr><td>${r.emp.name}</td>
+            <td class="num" style="${use>100?'color:var(--red);font-weight:600':''}">${fmt(use,0)}%</td>
+            <td class="num">${c0.appr}</td>
+            <td class="num">${fmt(r.compliance.stars,1)} ★</td>
+            <td class="num">${r.compliance.starCount}</td>
+            <td class="num">${fmt(c2.pct,0)}%</td>
+            <td style="width:80px">${ibar(c2.pct,c2.pct>=100?'var(--brand)':attn(c2.pct))}</td></tr>`;}).join('')
+         }</tbody></table>`;
+
+    return head1
+      +`<h3 class="sub-h">Quy trình, hệ thống và mục tiêu được giao — ưu tiên việc trễ hạn</h3>
+        <table><thead><tr><th>Nhân viên</th><th>Nội dung công việc</th><th>Nhóm tiêu chí</th><th class="num">Hạn</th><th class="num">Hoàn thành</th><th>Trạng thái</th><th class="num">Điểm chất lượng</th></tr></thead><tbody>${rows}</tbody></table>
         <p class="mini" style="margin:10px 0 0">Hiển thị ${shown.length}/${all.length} đầu việc. Việc chưa xong chuyển sang kỳ sau — cần quy tắc phân bổ điểm để không tính lặp một kết quả vào nhiều kỳ.</p>`;
   }
-  if(state.tab==='comp'){
-    const rows=recs.map(r=>{const c=r.compliance;return `<tr>
+
+  /* ---------- PHẦN II — NĂNG LỰC ---------- */
+  if(state.tab==='cap'){
+    const r1=recs.map(r=>{const c=r.compliance, k=r.crit[4], t=r.crit[6];
+      return `<tr>
       <td>${r.emp.name}</td>
       <td class="num">${c.late||'<span class="mini">0</span>'}</td>
       <td class="num">${c.forget||'<span class="mini">0</span>'}</td>
       <td class="num">${c.unpaid||'<span class="mini">0</span>'}</td>
       <td class="num">${c.leaveUsed}/${c.leaveTotal}</td>
       <td class="num">${c.overdue>3?`<span class="pill D">${c.overdue}</span>`:(c.overdue?c.overdue:'<span class="mini">0</span>')}</td>
-      <td class="num">${fmt(c.stars,1)} ★ <span class="mini">(${c.starCount})</span></td>
-      <td class="num">${fmt(r.groupPct[4],0)}%</td></tr>`;}).join('');
-    return `<table><thead><tr><th>Nhân viên</th><th class="num">Đi muộn</th><th class="num">Quên chấm công</th><th class="num">Nghỉ không lương</th><th class="num">Phép đã dùng</th><th class="num">Bước quy trình trễ</th><th class="num">Điểm phối hợp</th><th class="num">Đạt nhóm hành vi</th></tr></thead><tbody>${rows}</tbody></table>
-    <p class="mini" style="margin:10px 0 0">Chuyên cần từ Base HRM, trễ hạn từ Base Quy trình. Điểm phối hợp cần bổ sung bước chấm sao sau khi nhiệm vụ liên phòng ban hoàn tất. Báo cáo tuân thủ xem được kể cả khi công thức KPI chưa chốt.</p>`;
+      <td class="num">${k.appr}</td><td class="num">${t.appr}</td>
+      <td class="num" style="${r.groupPct[4]<80?'color:var(--red);font-weight:600':''}">${fmt(r.groupPct[4],0)}%</td>
+      <td style="width:70px">${ibar(r.groupPct[4],r.groupPct[4]>=95?'var(--brand)':attn(r.groupPct[4]))}</td></tr>`;}).join('');
+
+    const r2=recs.map(r=>{const c=r.crit[7];
+      return `<tr>
+      <td>${r.emp.name}</td>
+      <td class="num">${fmt(c.pct,0)}%</td>
+      <td class="num">${c.appr}</td>
+      <td class="num" style="${r.groupPct[5]<80?'color:var(--red);font-weight:600':''}">${fmt(r.groupPct[5],0)}%</td>
+      <td style="width:70px">${ibar(r.groupPct[5],r.groupPct[5]>=95?'var(--brand)':attn(r.groupPct[5]))}</td>
+      <td class="mini">${r.emp.ql1} chấm</td></tr>`;}).join('');
+
+    return `<h3 class="sub-h">Nhóm thái độ và kỷ luật</h3>
+      <table style="margin-bottom:24px"><thead><tr><th>Nhân viên</th><th class="num">Đi muộn</th><th class="num">Quên chấm công</th><th class="num">Nghỉ không lương</th><th class="num">Phép đã dùng</th><th class="num">Bước quy trình trễ</th><th class="num">Điểm kỷ luật</th><th class="num">Điểm tuân thủ</th><th class="num">Đạt nhóm</th><th></th></tr></thead><tbody>${r1}</tbody></table>
+      <h3 class="sub-h">Nhóm chuyên môn và cải tiến</h3>
+      <table><thead><tr><th>Nhân viên</th><th class="num">Mức ghi nhận</th><th class="num">Điểm cơ sở</th><th class="num">Đạt nhóm</th><th></th><th>Người đánh giá</th></tr></thead><tbody>${r2}</tbody></table>
+      <p class="mini" style="margin:10px 0 0">Thái độ và kỷ luật lấy tự động: chuyên cần từ Base HRM, bước trễ hạn từ Base Quy trình. Chuyên môn và cải tiến hiện do quản lý ghi nhận — cần chốt cách tính điểm và bằng chứng đi kèm.</p>`;
   }
+
+  /* ---------- TIẾN ĐỘ ĐÁNH GIÁ ---------- */
   const rows=recs.map(r=>`<tr>
     <td>${r.emp.name}</td>
     <td>${r.status==='Chưa tự chấm'?'<span class="pill C">Chưa tự chấm</span>':'<span class="mini">Đã tự chấm</span>'}</td>
@@ -1159,7 +1203,7 @@ function renderP3(){
   const critRow=(cc,i)=>{
     const t=targetText(r,cc,i), off=cc.appr!==cc.rule;
     return `<tr class="crit" aria-selected="${i===state.crit}" onclick="go(3,{crit:${i}})">
-      <td><div class="grpname">${cc.name}</div><div class="mini">${cc.part===1?GROUPS[cc.g]:'Thái độ & hành vi'}</div></td>
+      <td><div class="grpname">${cc.name}</div><div class="mini">${groupName(cc)}</div></td>
       <td class="mini">${t[0]}</td><td>${t[1]}</td>
       <td class="num">${fmt(cc.pct,0)}%</td>
       <td style="width:78px">${ibar(cc.pct, cc.pct>=100?'var(--brand)':attn(cc.pct))}</td>
@@ -1183,12 +1227,12 @@ function renderP3(){
         <table>
           <thead><tr><th>Phần</th><th class="num">Tỷ lệ</th><th class="num">Mục tiêu</th><th class="num">Thực đạt</th><th></th><th class="num">Đạt</th></tr></thead>
           <tbody>
-            <tr><td>Phần I — Kết quả công việc</td><td class="num mini">80%</td><td class="num mini">${fmt(TARGET_P1,2)}</td><td class="num"><b>${fmt(r.p1,2)}</b></td><td style="width:70px">${ibar(r.p1/TARGET_P1*100,r.p1/TARGET_P1>=0.8?'var(--brand)':'var(--amber)')}</td><td class="num">${fmt(r.p1/TARGET_P1*100,0)}%</td></tr>
-            <tr><td>Phần II — Thái độ và hành vi</td><td class="num mini">20%</td><td class="num mini">${fmt(TARGET_P2,2)}</td><td class="num"><b>${fmt(r.p2,2)}</b></td><td>${ibar(r.p2/TARGET_P2*100,r.p2/TARGET_P2>=0.8?'var(--brand)':'var(--amber)')}</td><td class="num">${fmt(r.p2/TARGET_P2*100,0)}%</td></tr>
+            <tr><td>Phần I — Công việc<div class="mini">Tài chính · Khách hàng &amp; dịch vụ · Quy trình &amp; hệ thống · Đào tạo &amp; phát triển</div></td><td class="num mini">80%</td><td class="num mini">${fmt(TARGET_P1,2)}</td><td class="num"><b>${fmt(r.p1,2)}</b></td><td style="width:70px">${ibar(r.p1/TARGET_P1*100,r.p1/TARGET_P1>=0.8?'var(--brand)':'var(--amber)')}</td><td class="num">${fmt(r.p1/TARGET_P1*100,0)}%</td></tr>
+            <tr><td>Phần II — Năng lực<div class="mini">Thái độ &amp; kỷ luật · Chuyên môn &amp; cải tiến</div></td><td class="num mini">20%</td><td class="num mini">${fmt(TARGET_P2,2)}</td><td class="num"><b>${fmt(r.p2,2)}</b></td><td>${ibar(r.p2/TARGET_P2*100,r.p2/TARGET_P2>=0.8?'var(--brand)':'var(--amber)')}</td><td class="num">${fmt(r.p2/TARGET_P2*100,0)}%</td></tr>
             <tr class="total"><td>Tổng</td><td class="num mini">100%</td><td class="num mini">${fmt(TARGET_TOTAL,2)}</td><td class="num"><b>${fmt(r.total,2)}</b></td><td>${ibar(r.ratio,RANK_COLOR[r.rank])}</td><td class="num"><b>${fmt(r.ratio,1)}%</b></td></tr>
           </tbody>
         </table>
-        <p class="mini" style="margin:12px 0 0">Mẫu khách ghi Phần II tỷ lệ 20% nhưng điểm mục tiêu 0,60 (không phải 1,00). Bản mô phỏng giữ đúng con số của khách; cách quy đổi Phần II cần chốt lại.</p>
+        <p class="mini" style="margin:12px 0 0">Cơ cấu điểm chia hai phần trước — Công việc và Năng lực — rồi mới xuống nhóm tiêu chí và từng tiêu chí. Mẫu khách ghi Phần II tỷ lệ 20% nhưng điểm mục tiêu 0,60 (không phải 1,00). Bản mô phỏng giữ đúng con số của khách; cách quy đổi Phần II cần chốt lại.</p>
       </div>
     </div>
     <div class="card">
@@ -1207,8 +1251,9 @@ function renderP3(){
       <table>
         <thead><tr><th>Tiêu chí</th><th>Chỉ tiêu</th><th>Thực tế</th><th class="num">Hoàn thành</th><th></th><th class="num">Điểm cơ sở</th><th class="num">Trọng số</th><th class="num">Điểm quy đổi</th></tr></thead>
         <tbody>
+          <tr class="sep"><td colspan="8">Phần I — Công việc · 80% · điểm mục tiêu ${fmt(TARGET_P1,2)}</td></tr>
           ${r.crit.filter(x=>x.part===1).map((cc,i)=>critRow(cc,i)).join('')}
-          <tr class="sep"><td colspan="8">Phần II — Thái độ và hành vi</td></tr>
+          <tr class="sep"><td colspan="8">Phần II — Năng lực · 20% · điểm mục tiêu ${fmt(TARGET_P2,2)}</td></tr>
           ${r.crit.filter(x=>x.part===2).map((cc,i)=>critRow(cc,i+4)).join('')}
         </tbody>
       </table>
