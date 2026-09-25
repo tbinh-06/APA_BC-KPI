@@ -711,7 +711,7 @@ function tasksOf(emp,month){
 }
 
 /* ===================== TRẠNG THÁI & TRUY VẤN ===================== */
-const state={page:1, month:CUR_MONTH, khoi:'Tất cả', deptId:'smn', empId:1, tab:'work', ptab:'kpi', crit:0, search:'', user:null};
+const state={page:1, month:CUR_MONTH, khoi:'Tất cả', deptId:'smn', empId:1, tab:'work', ptab:'kpi', qtab:'comp', crit:0, search:'', user:null};
 const recOf=(id,m)=>DATA[id][m];
 function pool(month,{khoi,deptId}={}){
   return EMPLOYEES.filter(e=> (!khoi||khoi==='Tất cả'||e.khoi===khoi) && (!deptId||e.deptId===deptId))
@@ -1546,43 +1546,71 @@ function renderP4(){
            {v:`${mine.length}`,l:'Đang chờ tôi xử lý',tone:mine.length?'bad':''},
            {v:`${all.length-recs.length}`,l:'Đã chốt'}]});
 
+  const showPay = u.role==='all';
+  const payTab = showPay && state.qtab==='pay';
   const sorted=[...recs].sort((a,b)=>(isMyTurn(b)?1:0)-(isMyTurn(a)?1:0)||ticket(a).step-ticket(b).step);
   const rows=sorted.map(r=>{
-    const t=ticket(r), c=r.compliance, lt=lateTasks(r.emp,r.month), me=isMyTurn(r);
+    const t=ticket(r), c=r.compliance, lt=lateTasks(r.emp,r.month), me=isMyTurn(r), pay=payroll(r.emp,r.month);
+    const k=v=>Math.round(v/1000)*1000;
+    const lc=k(pay.luongCong), ot=k(pay.ot), pc=k(pay.pc), th=k(pay.thuong), tc=k(pay.truCC), kt=k(pay.khauTru);
+    const net=lc+ot+pc+th-tc-kt;
+    const body = payTab
+      ? `<td class="num mini">${pay.cong}/${pay.std}</td>
+         <td class="num">${vnd(lc)}</td>
+         <td class="num mini">${ot?vnd(ot):'—'}</td>
+         <td class="num mini">${vnd(pc)}</td>
+         <td class="num ${th?'':'mini'}">${th?vnd(th):'—'}</td>
+         <td class="num ${tc>150000?'warn':'mini'}">${tc?'−'+vnd(tc):'—'}</td>
+         <td class="num mini">−${vnd(kt)}</td>
+         <td class="num"><b style="font-weight:600">${vnd(net)}</b></td>`
+      : `<td class="mini">${t.handler}</td>
+         <td class="num ${c.late>2?'warn':''}">${c.late}</td>
+         <td class="num mini">${c.lateMin}′</td>
+         <td class="num ${c.forget>2?'warn':''}">${c.forget}</td>
+         <td class="num">${c.unpaid}</td>
+         <td class="num mini">${c.leaveTotal-c.leaveUsed}/${c.leaveTotal}</td>
+         <td class="num ${lt.late>1?'warn':''}">${lt.late}</td>
+         <td class="num mini">${c.overdueHours}h</td>`;
     return `<tr class="${me?'hot':''}">
       <td><b style="font-weight:500">${r.emp.name}</b><div class="mini">${r.emp.pos}</div></td>
       <td class="mini">${r.emp.dept}</td>
       <td><span class="pill C">${TICKET_STEPS[t.step]}</span></td>
-      <td class="mini">${t.handler}</td>
-      <td class="num ${c.late>2?'warn':''}">${c.late}</td>
-      <td class="num mini">${c.lateMin}′</td>
-      <td class="num ${c.forget>2?'warn':''}">${c.forget}</td>
-      <td class="num">${c.unpaid}</td>
-      <td class="num mini">${c.leaveTotal-c.leaveUsed}/${c.leaveTotal}</td>
-      <td class="num ${lt.late>1?'warn':''}">${lt.late}</td>
-      <td class="num mini">${c.overdueHours}h</td>
+      ${body}
       <td>${me?`<button class="btn sm primary" onclick="openTicket('${t.code}')">Đánh giá</button>`
               :`<button class="btn sm" onclick="openTicket('${t.code}')">Mở phiếu</button>`}</td>
     </tr>`;}).join('');
+
+  const head3 = `<th>Nhân viên</th><th>Bộ phận</th><th>Bước đang chờ</th>`;
+  const headMid = payTab
+    ? `<th class="num">Công</th><th class="num">Lương theo công</th><th class="num">Tăng ca</th><th class="num">Phụ cấp</th>
+       <th class="num">Thưởng</th><th class="num">Trừ chấm công</th><th class="num">Khấu trừ BH</th><th class="num">Thực nhận</th>`
+    : `<th>Người xử lý</th><th class="num">Đi muộn</th><th class="num">Số phút</th><th class="num">Quên chấm</th>
+       <th class="num">Nghỉ KL</th><th class="num">Phép còn</th><th class="num">CV trễ</th><th class="num">Giờ trễ</th>`;
+  const nCols = 12;
+
+  const tabBar = showPay ? `<div class="tabs" role="tablist">
+      <button role="tab" aria-selected="${!payTab}" onclick="go(4,{qtab:'comp'})">Tuân thủ và chuyên cần</button>
+      <button role="tab" aria-selected="${payTab}" onclick="go(4,{qtab:'pay'})">Các khoản lương kỳ này</button>
+    </div>` : '';
 
   $('#page4').innerHTML=`
   ${head}
   <div class="card">
     <header><div><h2>Danh sách hồ sơ chờ xử lý</h2><p>Hồ sơ đang chờ chính người đăng nhập được đưa lên đầu và làm nổi</p></div>
-      <span class="mini">${sorted.length} hồ sơ</span></header>
+      <span class="mini">${sorted.length} hồ sơ${payTab?' · đơn vị: đồng':''}</span></header>
+    ${tabBar}
     <div class="body tbl-wrap">
-      <table style="min-width:1100px"><thead><tr>
-        <th>Nhân viên</th><th>Bộ phận</th><th>Bước đang chờ</th><th>Người xử lý</th>
-        <th class="num">Đi muộn</th><th class="num">Số phút</th><th class="num">Quên chấm</th><th class="num">Nghỉ KL</th><th class="num">Phép còn</th>
-        <th class="num">CV trễ</th><th class="num">Giờ trễ</th><th>Phiếu Service</th>
+      <table style="min-width:${payTab?1460:1100}px"><thead><tr>
+        ${head3}${headMid}<th>Phiếu Service</th>
       </tr></thead>
-      <tbody>${rows||'<tr><td colspan="12" class="mini">Không còn hồ sơ nào chờ đánh giá trong phạm vi này.</td></tr>'}</tbody></table>
+      <tbody>${rows||`<tr><td colspan="${nCols}" class="mini">Không còn hồ sơ nào chờ đánh giá trong phạm vi này.</td></tr>`}</tbody></table>
       <div id="tflash" class="mini tk-flash"></div>
     </div>
   </div>
   ${notes('Ghi chú cho buổi trình bày',[
     'Trang này gom dữ liệu tuân thủ từ Base HRM và Base Quy trình ngay cạnh nút mở phiếu, để người chấm không phải mở thêm báo cáo nào khác.',
-    'Khi chạy thật, nút mở phiếu trỏ thẳng tới request tương ứng trên Base Service theo mã phiếu.'])}`;
+    'Khi chạy thật, nút mở phiếu trỏ thẳng tới request tương ứng trên Base Service theo mã phiếu.',
+    'Tab lương chỉ hiện với Ban giám đốc và Phòng Nhân sự; trưởng bộ phận không thấy. Các khoản là tạm tính của kỳ, chưa phải bảng lương chốt.'])}`;
 }
 
 /* ===================== KHỞI CHẠY ===================== */
